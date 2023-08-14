@@ -45,18 +45,81 @@ void interval(int PIN, const unsigned int &min, bool Status) {
   hold(1000);
 }
 
+
+const char MAIN_page[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: white;
+    text-align: center;
+    color: blue;
+  }
+  h1 {
+    margin-top: 20px;
+  }
+  form {
+    margin-top: 20px;
+  }
+  input[type='text'], input[type='checkbox'], input[type='submit'] {
+    margin: 5px;
+  }
+  .status {
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+  <h1>Control the Pin</h1>
+  <form action='/settings' method='POST'>
+    <label for='on'>ON Time (min): </label>
+    <input type='text' name='on' value='{{ON}}'><br>
+    <label for='off'>OFF Time (min): </label>
+    <input type='text' name='off' value='{{OFF}}'><br>
+    <label for='pin'>Relay Pin: </label>
+    <input type='text' name='pin' value='{{relayPin}}'><br>
+    <label for='manual'>Manual Mode: </label>
+    <input type='checkbox' name='manual' {{manualMode ? 'checked' : ''}}><br>
+    <input type='submit' value='Save'>
+  </form>
+  <div class='status'>
+    <p>Saved Variables:</p>
+    <p>Tempo ON (min): {{ON}}</p>
+    <p>Tempo OFF (min): {{OFF}}</p>
+    <p>Pino do Relé: {{relayPin}}</p>
+    <p>Modo Manual: {{manualMode ? 'Ativado' : 'Desativado'}}</p>
+  </div>
+</body>
+</html>
+)=====";
+
+void handleRoot() {
+  String htmlContent = MAIN_page;  // Use the MAIN_page string
+  // Add code to replace placeholders and handle variables
+  htmlContent.replace("{{ON}}", String(ON));
+  htmlContent.replace("{{OFF}}", String(OFF));
+  htmlContent.replace("{{manualMode}}", manualMode ? "Ativado" : "Desativado");
+  htmlContent.replace("{{relayPin}}", relayPin);
+
+  // Add code to send the modified HTML content to the client's browser
+  webServer.send(200, "text/html", htmlContent);
+}
+
+
 void saveSettingsToTxt() {
-  File configFile = SPIFFS.open("/config.txt", "r");
+  File configFile = SPIFFS.open("/config.txt", "w");
   if (!configFile) {
-    Serial.println(F("Failed to open config file for reading"));
+    Serial.println(F("Failed to open config file for writing"));
     return;
   }
 
-  ON = configFile.parseInt();
-  OFF = configFile.parseInt();
-  manualMode = configFile.parseInt();
-  relayPin = configFile.readStringUntil('\r');  // Use '\r' para ler a variável do pino
-  relayPin.trim();
+  configFile.println(ON);
+  configFile.println(OFF);
+  configFile.println(manualMode);
+  configFile.println(relayPin);
 
   configFile.close();
 }
@@ -71,41 +134,12 @@ void readSettingsFromTxt() {
   ON = configFile.parseInt();
   OFF = configFile.parseInt();
   manualMode = configFile.parseInt();
-  relayPin = configFile.readStringUntil('\r');  // Use '\r' para ler a variável do pino
+  relayPin = configFile.readStringUntil('\r');
   relayPin.trim();
 
   configFile.close();
 }
 
-void handleRoot() {
-  String html = "<html>";
-  html += "<head><meta charset='UTF-8'>";
-  html += "<style>";
-  html += "body { font-family: Arial, sans-serif; background-color: white; text-align: center; color: blue; }";
-  html += "h1 { margin-top: 20px; }";
-  html += "form { margin-top: 20px; }";
-  html += "input[type='text'], input[type='checkbox'], input[type='submit'] { margin: 5px; }";
-  html += ".status { margin-top: 20px; }";
-  html += "</style></head>";
-  html += "<body>";
-  html += "<h1>Temporizador</h1>";
-  html += "<form action='/settings' method='POST'>";
-  html += "<label for='on'>Tempo ON (min): </label><input type='text' name='on' value='" + String(ON) + "'><br>";
-  html += "<label for='off'>Tempo OFF (min): </label><input type='text' name='off' value='" + String(OFF) + "'><br>";
-  html += "<label for='pin'>Pino do Relé: </label><input type='text' name='pin' value='" + relayPin + "'><br>";
-  html += "<label for='manual'>Modo Manual: </label><input type='checkbox' name='manual' " + String(manualMode ? "checked" : "") + "><br>";
-  html += "<input type='submit' value='Salvar'>";
-  html += "</form>";
-  html += "<div class='status'>";
-  html += "<p>Variáveis Salvas:</p>";
-  html += "<p>Tempo ON (min): " + String(ON) + "</p>";
-  html += "<p>Tempo OFF (min): " + String(OFF) + "</p>";
-  html += "<p>Modo Manual: " + String(manualMode ? "Ativado" : "Desativado") + "</p>";
-  html += "<p>Pino do Relé: " + String(relayPin) + "</p>";
-  html += "</div>";
-  html += "</body></html>";
-  webServer.send(200, "text/html", html);
-}
 
 void handleSettings() {
   ON = webServer.arg("on").toInt();
@@ -117,21 +151,41 @@ void handleSettings() {
   webServer.send(302, "text/plain", "Settings updated");
 }
 
+
 void setup() {
   Serial.begin(115200);
 
   pinMode(LED_BUILTIN, OUTPUT);
   wifiManager.setConfigPortalTimeout(180);
   wifiManager.autoConnect("ESPWebServer");
+  Serial.println("Relay Pin: " + relayPin);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   if (SPIFFS.begin()) {
     Serial.println(F("SPIFFS initialized"));
+
+    // Verifica se o arquivo config.txt já existe
+    if (!SPIFFS.exists("/config.txt")) {
+      Serial.println(F("Creating and saving default config.txt"));
+
+      File configFile = SPIFFS.open("/config.txt", "w");
+      if (configFile) {
+        // Escreve os valores padrão no arquivo
+        configFile.println("1");   // ON
+        configFile.println("35");  // OFF
+        configFile.println("0");   // ManualMode (0 para falso)
+        configFile.println("D8");  // relayPin
+        configFile.close();
+      } else {
+        Serial.println(F("Failed to create config.txt"));
+      }
+    }
   } else {
     Serial.println(F("SPIFFS initialization failed"));
   }
+
   Serial.println(F("Conectado"));
 
   webServer.on("/", HTTP_GET, handleRoot);
@@ -153,16 +207,16 @@ void pumpControl() {
 
   // Verifica se já passou o intervalo em que a bomba ficará acionada
   if (pumpState && currentTime - lastPumpTime >= onInterval) {
-    pumpState = false;               // Desliga a bomba após o intervalo definido
+    pumpState = false;                    // Desliga a bomba após o intervalo definido
     interval(relayPinValue, OFF, false);  // Desliga a bomba
-    lastPumpTime = currentTime;      // Atualiza o último acionamento
+    lastPumpTime = currentTime;           // Atualiza o último acionamento
   }
 
   // Verifica se é hora de ligar a bomba novamente
   if (!pumpState && currentTime - lastPumpTime >= OFF) {
-    pumpState = true;              // Liga a bomba
+    pumpState = true;                   // Liga a bomba
     interval(relayPinValue, ON, true);  // Liga a bomba
-    lastPumpTime = currentTime;    // Atualiza o último acionamento
+    lastPumpTime = currentTime;         // Atualiza o último acionamento
   }
 }
 
@@ -177,6 +231,6 @@ void loop() {
   }
 
   hold(1000);
-  Serial.println(timeClient.getFormattedTime());
+  //Serial.println(timeClient.getFormattedTime());
   yield();
 }
