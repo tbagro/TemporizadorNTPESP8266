@@ -16,33 +16,39 @@ unsigned long lastActivationTime;
 
 const char *filePath = "/config.txt";
 
-
-void atualizarIntervaloEntrePulsos() {
-  Serial.println("Digite o novo valor para o intervalo entre pulsos (em minutos): ");
-
-  while (!Serial.available()) {
-    delay(100);  // Aguarda a entrada do usuário
+void hold(const unsigned int &ms) {
+  unsigned long m = millis();
+  while (millis() - m < ms) {
+    yield();
   }
-
-  // Lê o valor inserido pelo usuário
-  int novoIntervalo = Serial.parseInt();
-
-  // Atualiza o valor da variável global
-  intervalBetweenPulses = novoIntervalo;
-
-  // Salva o novo valor no arquivo
-  File configFile = SPIFFS.open(filePath, "w");
-  if (!configFile) {
-    Serial.println("Falha ao abrir o arquivo para escrita");
-    return;
-  }
-
-  configFile.println(intervalBetweenPulses);
-  configFile.close();
-
-  Serial.print("Intervalo entre pulsos atualizado para: ");
-  Serial.println(intervalBetweenPulses);
 }
+
+// void atualizarIntervaloEntrePulsos() {
+//   Serial.println("Digite o novo valor para o intervalo entre pulsos (em minutos): ");
+
+//   while (!Serial.available()) {
+//     delay(100);  // Aguarda a entrada do usuário
+//   }
+
+//   // Lê o valor inserido pelo usuário
+//   int novoIntervalo = Serial.parseInt();
+
+//   // Atualiza o valor da variável global
+//   intervalBetweenPulses = novoIntervalo;
+
+//   // Salva o novo valor no arquivo
+//   File configFile = SPIFFS.open(filePath, "w");
+//   if (!configFile) {
+//     Serial.println("Falha ao abrir o arquivo para escrita");
+//     return;
+//   }
+
+//   configFile.println(intervalBetweenPulses);
+//   configFile.close();
+
+//   Serial.print("Intervalo entre pulsos atualizado para: ");
+//   Serial.println(intervalBetweenPulses);
+// }
 
 void saveLastPulseTime(unsigned long eventTime) {
   // Abre o arquivo para escrita
@@ -112,7 +118,7 @@ void acionarReleComTempo(unsigned int ms) {
   Serial.println(timeClient.getEpochTime());
 
   // Aguardar até que tenha passado o tempo desejado
-  delay(ms);
+  hold(ms);
 
   digitalWrite(relayPin, LOW);  // Desligar o relé
 }
@@ -126,7 +132,7 @@ void desligarReleComTempo(unsigned int min) {
 
   // Aguardar até que tenha passado o intervalo desejado desde a última ativação
   while (timeClient.getEpochTime() - readLastPulseTime() < epoch) {
-    delay(1000);  // Atraso de 1 segundo
+    hold(1000);  // Atraso de 1 segundo
   }
 }
 
@@ -154,12 +160,17 @@ void setup() {
 
 void loop() {
   timeClient.update();
+
+  if (WiFi.status() == WL_CONNECTED && timeClient.update()) {
+    // Acionar o relé
+    acionarReleComTempo(pulseDuration);
+    
+    // Desligar o relé após o intervalo desejado
+    desligarReleComTempo(intervalBetweenPulses);
+  } else {
+    Serial.println("Sem conexão com o servidor NTP. Funções acionarReleComTempo e desligarReleComTempo não executadas.");
+  }
   
-  // Acionar o relé
-  acionarReleComTempo(pulseDuration);
-  
-  // Desligar o relé após o intervalo desejado
-  desligarReleComTempo(intervalBetweenPulses);
-  //atualiza o valor  entre os pulsos
-  atualizarIntervaloEntrePulsos();
+  // Aguarde um intervalo antes da próxima iteração
+  delay(1000);  // Atraso de 1 segundo
 }
