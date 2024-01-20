@@ -3,6 +3,9 @@
 #include <NTPClient.h>
 #include <FS.h>
 
+#define DEBUG_MODE  // Comente ou descomente esta linha para ativar ou desativar o modo de depuração
+
+
 const int relayPin = D5;  // Pino ao qual o relé está conectado
 bool relayState = false;  // Estado inicial do relé: desligado
 
@@ -10,8 +13,8 @@ WiFiManager wifiManager;
 WiFiUDP udp;
 NTPClient timeClient(udp, "a.st1.ntp.br", -4 * 3600, 60000);  // Fuso horário: GMT-4
 
-unsigned long pulseDuration = 40000;      // 40 segundos em milissegundos
-unsigned long intervalBetweenPulses = 2;  // 40 minutos
+unsigned long pulseDuration = 35000;      // 40 segundos em milissegundos
+unsigned long intervalBetweenPulses = 40;  // 40 minutos
 unsigned long lastActivationTime;
 
 const char *filePath = "/config.txt";
@@ -23,8 +26,16 @@ void hold(const unsigned int &ms) {
   }
 }
 
+#ifdef DEBUG_MODE
+#define DEBUG_PRINTLN(x) Serial.println(x)
+#define DEBUG_PRINT(x) Serial.print(x)
+#else
+#define DEBUG_PRINTLN(x)
+#define DEBUG_PRINT(x)
+#endif
+
 // void atualizarIntervaloEntrePulsos() {
-//   Serial.println("Digite o novo valor para o intervalo entre pulsos (em minutos): ");
+//   DEBUG_PRINTLN("Digite o novo valor para o intervalo entre pulsos (em minutos): ");
 
 //   while (!Serial.available()) {
 //     delay(100);  // Aguarda a entrada do usuário
@@ -39,7 +50,7 @@ void hold(const unsigned int &ms) {
 //   // Salva o novo valor no arquivo
 //   File configFile = SPIFFS.open(filePath, "w");
 //   if (!configFile) {
-//     Serial.println("Falha ao abrir o arquivo para escrita");
+//     DEBUG_PRINTLN("Falha ao abrir o arquivo para escrita");
 //     return;
 //   }
 
@@ -47,43 +58,43 @@ void hold(const unsigned int &ms) {
 //   configFile.close();
 
 //   Serial.print("Intervalo entre pulsos atualizado para: ");
-//   Serial.println(intervalBetweenPulses);
+//   DEBUG_PRINTLN(intervalBetweenPulses);
 // }
 
 void saveLastPulseTime(unsigned long eventTime) {
   // Abre o arquivo para escrita
   File configFile = SPIFFS.open(filePath, "w");
   if (!configFile) {
-    Serial.println("Falha ao abrir o arquivo para escrita");
+    DEBUG_PRINTLN("Falha ao abrir o arquivo para escrita");
     return;
   }
 
   // Escreve o horário do último acionamento no arquivo
   configFile.println(eventTime);
   configFile.close();
-  Serial.println("Horário do último acionamento salvo com sucesso!");
+  DEBUG_PRINTLN("Horário do último acionamento salvo com sucesso!");
 }
 
 unsigned long readLastPulseTime() {
   if (!SPIFFS.begin()) {
-    Serial.println("Falha ao montar o sistema de arquivos SPIFFS");
+    DEBUG_PRINTLN("Falha ao montar o sistema de arquivos SPIFFS");
     return 0;
   }
 
   if (!SPIFFS.exists(filePath)) {
-    Serial.println("Arquivo de configuração não encontrado");
+    DEBUG_PRINTLN("Arquivo de configuração não encontrado");
     return 0;
   }
 
   File configFile = SPIFFS.open(filePath, "r");
   if (!configFile) {
-    Serial.println("Falha ao abrir o arquivo para leitura");
+    DEBUG_PRINTLN("Falha ao abrir o arquivo para leitura");
     return 0;
   }
 
   String content = configFile.readStringUntil('\n');
-  Serial.print("valor salvo: ");
-  Serial.println(content);
+  DEBUG_PRINT("valor salvo: ");
+  DEBUG_PRINTLN(content);
   configFile.close();
   return content.toInt();
 }
@@ -104,18 +115,18 @@ void printLastPulseTime() {
   strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
 
   // Imprimir o valor do último acionamento
-  Serial.print("Último acionamento registrado em: ");
-  Serial.println(lastPulseTime);
-  Serial.print("Último acionamento registrado em: ");
-  Serial.println(buffer);
+  DEBUG_PRINT("Último acionamento registrado em: ");
+  DEBUG_PRINTLN(lastPulseTime);
+  DEBUG_PRINT("Último acionamento registrado em: ");
+  DEBUG_PRINTLN(buffer);
 }
 
 void acionarReleComTempo(unsigned int ms) {
   digitalWrite(relayPin, HIGH);  // Ligar o relé
   saveLastPulseTime(timeClient.getEpochTime());
   printLastPulseTime();  // Imprimir o valor salvo do último acionamento
-  Serial.print("Rele on: ");
-  Serial.println(timeClient.getEpochTime());
+  DEBUG_PRINT("Rele on: ");
+  DEBUG_PRINTLN(timeClient.getEpochTime());
 
   // Aguardar até que tenha passado o tempo desejado
   hold(ms);
@@ -125,10 +136,10 @@ void acionarReleComTempo(unsigned int ms) {
 
 void desligarReleComTempo(unsigned int min) {
   unsigned long epoch = min * 60;
-  Serial.print("Rele off: ");
-  Serial.println(timeClient.getEpochTime());
-  Serial.print("epoch: ");
-  Serial.println(epoch);
+  DEBUG_PRINT("Rele off: ");
+  DEBUG_PRINTLN(timeClient.getEpochTime());
+  DEBUG_PRINT("epoch: ");
+  DEBUG_PRINTLN(epoch);
 
   // Aguardar até que tenha passado o intervalo desejado desde a última ativação
   while (timeClient.getEpochTime() - readLastPulseTime() < epoch) {
@@ -153,7 +164,7 @@ void setup() {
 
   // Inicia o sistema de arquivos SPIFFS
   if (!SPIFFS.begin()) {
-    Serial.println("Falha ao montar o sistema de arquivos SPIFFS");
+    DEBUG_PRINTLN("Falha ao montar o sistema de arquivos SPIFFS");
     return;
   }
 }
@@ -168,9 +179,9 @@ void loop() {
     // Desligar o relé após o intervalo desejado
     desligarReleComTempo(intervalBetweenPulses);
   } else {
-    Serial.println("Sem conexão com o servidor NTP. Funções acionarReleComTempo e desligarReleComTempo não executadas.");
+    DEBUG_PRINTLN("Sem conexão com o servidor NTP. Funções acionarReleComTempo e desligarReleComTempo não executadas.");
   }
   
   // Aguarde um intervalo antes da próxima iteração
-  delay(1000);  // Atraso de 1 segundo
+  hold(1000);  // Atraso de 1 segundo
 }
