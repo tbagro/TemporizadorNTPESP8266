@@ -17,8 +17,8 @@ unsigned long lastActivationTime;
 const char *filePath = "/config.txt";
 
 void hold(const unsigned int &ms) {
-  unsigned long m = millis();
-  while (millis() - m < ms) {
+  unsigned long startTime = millis();
+  while (millis() - startTime < ms) {
     yield();
   }
 }
