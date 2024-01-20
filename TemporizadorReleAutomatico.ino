@@ -169,19 +169,30 @@ void setup() {
   }
 }
 
+bool timeSynchronized = false;
 void loop() {
   timeClient.update();
 
-  if (WiFi.status() == WL_CONNECTED && timeClient.update()) {
-    // Acionar o relé
-    acionarReleComTempo(pulseDuration);
-    
-    // Desligar o relé após o intervalo desejado
-    desligarReleComTempo(intervalBetweenPulses);
-  } else {
-    DEBUG_PRINTLN("Sem conexão com o servidor NTP. Funções acionarReleComTempo e desligarReleComTempo não executadas.");
+  if (WiFi.status() == WL_CONNECTED && WiFi.isConnected()) {
+    // Verificar se o servidor NTP está atualizado
+    if (!timeSynchronized || timeClient.update()) {
+      // Set the timeSynchronized flag to true when time is successfully synchronized
+      timeSynchronized = true;
+      DEBUG_PRINTLN("Servidor NTP atualizado. Funções acionadas.");
+
+      // Acionar o relé
+      acionarReleComTempo(pulseDuration);
+      // Aguarde um intervalo antes de verificar o desligamento do relé
+      hold(5000);  // Atraso de 5 segundos para permitir que o relé seja acionado
+      // Desligar o relé após o intervalo desejado
+      desligarReleComTempo(intervalBetweenPulses);
+    } else {
+      DEBUG_PRINTLN("WiFi sem internet. Funções não acionadas.");
+      timeSynchronized = false;
+    }
+
+    // Aguarde um intervalo antes da próxima iteração
+    hold(1000);  // Atraso de 1 segundo
+    DEBUG_PRINTLN(timeClient.getFormattedTime());
   }
-  
-  // Aguarde um intervalo antes da próxima iteração
-  hold(1000);  // Atraso de 1 segundo
 }
